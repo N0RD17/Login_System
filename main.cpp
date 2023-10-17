@@ -1,17 +1,20 @@
 #include <iostream>
 #include <fstream>
+#include <algorithm>
 #include <string>
-#include <limits>
 #include <vector>
+#include <limits>
+#include <cstdlib>
+#include <cctype>
 
-// Data structure for every user
+// User Data Structure
 struct User{
    std::string username;
    std::string password;
 };
 
 // Stores the users
-std::vector<User> users;
+std::vector<User> users{};
 
 void ignoreLine()
 {
@@ -19,6 +22,7 @@ void ignoreLine()
    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
 
+// Handles bad input inside a fail std::cin
 void badInput_handler()
 {
    if(std::cin.eof())
@@ -31,16 +35,18 @@ void badInput_handler()
    ignoreLine();		// Removes bad input
 }
 
+// Handles function when user logins
 void insideMenu(std::string &username)
 {
-   char userChoice;
+   char userChoice{};
    std::cout << "Welcome " << username << '!' << '\n';
 
    do{
       std::cout << "-------- Pick a number --------" << '\n';
       std::cout << "1. Display your username" << '\n';
       std::cout << "2. Do addition" << '\n';
-      std::cout << "3. Log off" << '\n';
+      std::cout << "3. Delete a user" << '\n';
+      std::cout << "4. Log off" << '\n';
 
       std::cin >> userChoice;
       if(!std::cin){
@@ -56,32 +62,99 @@ void insideMenu(std::string &username)
          case '2':{
             int add_1{ 0 }, add_2{ 0 };
             std::cout << "Enter num 1: ";
-            std::cin >> add_1;
-            if(!std::cin) {
-               badInput_handler();
+            while(!(std::cin >> add_1)){
+               std::cout << "Enter num 1: ";
+               if(!std::cin) {
+                  badInput_handler();
+               }
             }
             
             std::cout << "Enter num 2: ";
-            std::cin >> add_2;
-            if(!std::cin){
-               badInput_handler();
+            while(!(std::cin >> add_2)){
+               std::cout << "Enter num 2: ";
+               if(!std::cin){
+                  badInput_handler();
+               }
             }
             
             std::cout << add_1 << " + " << add_2 << " = " << add_1 + add_2 << '\n';
+         }break;
+
+         case '3':{
+            std::string SelectedUser{};
+            char safetyCheck{};
+
+            if(users.size() <= 1){
+               std::cout << "Unable to locate other users to delete. You are the only user." << '\n';
+               break; // Exit the case without deleting
+            }
+            std::cout << "Which user would you like to delete?" << "\n\n";
+            for(User& savedUsers: users){
+               std::cout << savedUsers.username << '\n';
+            }
+            std::cout << std::endl;;
+            
+            std::cout << "Enter user: ";
+            std::cin >> SelectedUser;
+            if(!std::cin){
+               badInput_handler();
+            }
+
+            if(SelectedUser == username){
+               std::cout << "You are not able to delete yourself..." << std::endl;
+               break;
+            }
+
+            do{
+               std::cout << "You're about to delete user \"" << SelectedUser << "\"" << " Are you sure? (Y/N): ";
+               std::cin >> safetyCheck;
+               if(!std::cin){
+                  badInput_handler();
+               }
+            }while(std::tolower(safetyCheck) != 'y' && std::tolower(safetyCheck) != 'n');
+
+            if(std::tolower(safetyCheck) == 'y')
+            {
+               auto it = std::find_if(users.begin(), users.end(), [&](const User& u){return u.username == SelectedUser;});
+
+               if(it != users.end()){
+                  users.erase(it);
+                  std::cout << "User \"" << SelectedUser << "\" has been deleted..." << std::endl;
+
+                  // Edits the file
+                  std::ofstream outFile("database.txt");
+                  if(!outFile.is_open())
+                  {
+                     std::cerr << "Error opening file!" << std::endl;
+                     std::exit(1);
+                  }
+
+                  for(const User &logins: users)
+                  {
+                     outFile << logins.username << ' ' << logins.password << '\n';
+                  }
+                  outFile.close();
+                  
+               } else {
+                  std::cout << "User \"" << SelectedUser << "\" not found.." << std::endl;
+               }
+               
+            } else if(std::tolower(safetyCheck) == 'n'){
+               std::cout << "Deletion aborted..." << std::endl;
+            }
          }break;
 
             
          default: break;
       }
       
-   } while(userChoice != '3');
+   } while(userChoice != '4');
 
    std::cout << "Requesting user " << username << " to log off..." << '\n';
    std::cout << "Log off successful!" << '\n';
-
-   
 }
 
+//  Handles users being registered
 void registerUser(const std::string &username, const std::string &password)
 {
    users.push_back({username, password});
@@ -100,20 +173,25 @@ void registerUser(const std::string &username, const std::string &password)
    outFile.close();
 }
 
+// Handles users logging-in
 bool loginUser(const std::string &username, const std::string &password)
 {
    std::ifstream inFile("database.txt");
    if(!inFile.is_open())
    {
-      std::cerr << "Failed to open database.txt" << std::endl;
-      exit(1);
+      std::cerr << "Could not find file database.txt. Try registering a user" << std::endl;
+      std::exit(1);
    }
 
+   // Clears the array preventing double the users to be added per loginUser call
+   users.clear();
+
+   // Temporary User object to store onto users vector
    User tempUser;
    
    while(inFile >> tempUser.username >> tempUser.password)
    {
-      users.push_back(tempUser);
+      users.emplace_back(tempUser);
    }
 
    inFile.close();
@@ -130,7 +208,6 @@ bool loginUser(const std::string &username, const std::string &password)
    return false; // Authentication failed
 }
 
-
 int main()
 {
    char choice;
@@ -139,12 +216,12 @@ int main()
       std::cout << "Choose an option: " << '\n';
       std::cout << "1. Register" << '\n';
       std::cout << "2. Log in" << '\n';
-      std::cout << "3. Exit" << '\n';
+      std::cout << "3. Wipe all users" << '\n';
+      std::cout << "4. Exit" << '\n';
       std::cin >> choice;
       if(!std::cin){
          badInput_handler();
       }
-
 
       switch(choice)
       {
@@ -184,16 +261,50 @@ int main()
             if(loginUser(username, password)){
                std::cout << "Login successful!" << '\n';
                insideMenu(username);
-            } else {
+            } else{
                std::cout << "Login failed. Incorrect credentials." << '\n';
             }
+         }break;
+
+         case '3':{
+            char safetyCheck{};
+
+            do{
+               std::cout << "Are you sure you want to wipe all users? (Y/N): ";
+               std::cin >> safetyCheck;
+               if(!std::cin){
+                  badInput_handler();
+               }
+            }while(std::tolower(safetyCheck) != 'y' && std::tolower(safetyCheck) != 'n');
+
+            if(std::tolower(safetyCheck) == 'y')
+            {
+               users.clear();
+
+               // Edit file
+               std::ofstream outFile("database.txt");
+               if(!outFile.is_open())
+               {
+                  std::cerr << "Error opening file!" << std::endl;
+                  std::exit(1);
+               }
+
+               for(const User &logins: users)
+               {
+                  outFile << logins.username << ' ' << logins.password << '\n';
+               }
+               outFile.close();
+
+               std::cout << "WIPE SUCCESSFUL!" << std::endl;
+            } else if(std::tolower(safetyCheck) == 'n'){
+               std::cout << "!!!WIPE DATA ABORTED!!!" << std::endl;
+            }
+            
          }break;
             
          default: break;
       }
-   }while(choice != '3');
+   }while(choice != '4');
 
-   
-   
    return 0;
 }
